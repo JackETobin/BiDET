@@ -4,32 +4,13 @@
 *
 *	-----KEY NAME------
 *	----NAME LENGTH----	<-- (uint32_bd)
-*	-----DATA SIZE----- <--DATA PTR IN KEY (uint64_bd)
+*	-----DATA SIZE----- 	<--DATA PTR IN KEY (bd_buffType)
 *	----DATA ITSELF----
 *
 *	-----DATA TOP------
 */
 
 #include "BiDET.h"
-
-/*
-* --------------------TODO--------------------
-* DECIGN A VOID COMPACTION SYSTEM
-* 
-* COMPACT-> NEEDS TO CHECK FOR VOIDS, SHIFT DATA
-* IN MEM, GET ALL KEYS ASOCIATED WITH THE DATA,
-* SHIFT POINTERS IN KEYS TO THEIR CORRESPONDING
-* DATA'S NEW LOCATION, AND REMOVE ALL VOID KEYS
-* POINTING TO THE VOIDS THAT WERE FILLED.
-* 
-* TEST Reserve()
-* 
-* 2/9/24 TIMES:
-* LIST LENGTH:		1000 KEYS
-* STORE() TIME:		0.088300MS
-* GET() TIME:		0.054300MS
-* TOTAL TIME:		0.142600MS
-*/
 
 #define BD_INT32SIZE sizeof(uint32_bd)
 #define BD_KEYSIZE sizeof(key_bd)
@@ -102,15 +83,15 @@ Binary_Index(uint64_bd hash)
 	key_bd* pKey = keyRing - (numKeys >> 1);
 
 	int32_bd positionCheck =	(pKey - 1 > keyRing - numKeys) *
-								((hash < (pKey + 1)->hash) -
-								(hash >= (pKey - 1)->hash));
+					((hash < (pKey + 1)->hash) -
+					(hash >= (pKey - 1)->hash));
 	uint32_bd i = 0;
 	while (positionCheck)
 	{
 		i += (numKeys >> (i + 2) > 0);
 		pKey += positionCheck * (numKeys >> (i + 1));
 		positionCheck = (hash < (pKey + 1)->hash) -
-						(hash >= (pKey - 1)->hash);
+				(hash >= (pKey - 1)->hash);
 	}
 	return pKey;
 }
@@ -121,7 +102,7 @@ Index(uint64_bd hash)
 {
 	key_bd* pKey = Stash->keyRing;
 	uint32_bd border = (hash <= pKey->hash ||
-					 hash >= (pKey - (Stash->numKeys - 1))->hash);
+			    hash >= (pKey - (Stash->numKeys - 1))->hash);
 	return border ? Border_Index(hash) : Binary_Index(hash);
 }
 
@@ -166,7 +147,7 @@ Check_Unique_Hash(char* keyName, key_bd** pTarget, const uint64_bd hash)
 {
 	key_bd* pKey = *pTarget;
 	uint32_bd duplicate = (hash == pKey->hash ||
-						hash == (pKey + 1)->hash);
+			       hash == (pKey + 1)->hash);
 	return duplicate ? Check_Duplicate_Key_Name(keyName, pTarget, hash) : 0;
 }
 
@@ -244,7 +225,7 @@ Consolidate_Void(key_bd* pVoidKey, uint64_bd sizeRequired, bd_buffType* dataSize
 static inline void
 Commit_Store
 (	char*		keyName,		key_bd*			pKey, 
-	uint64_bd	sizeRequired,	uint64_bd		hash, 
+	uint64_bd	sizeRequired,		uint64_bd		hash, 
 	void*		dataIn,			bd_buffType		dataSize)
 {
 	key_bd* pVoidKey = Check_Void(sizeRequired);
