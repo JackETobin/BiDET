@@ -48,7 +48,7 @@ typedef enum BiDET_Error_Code
 }bd_errcode;
 
 
-err_uint32								BiDET_Error_Catch(bd_errcode errorCode, void* callID[]);
+err_uint32					BiDET_Error_Catch(bd_errcode errorCode, void* callID[]);
 #define ERR_CATCH(errCode, callID)		BiDET_Error_Catch(errCode, callID)
 
 #else
