@@ -36,11 +36,11 @@ typedef enum BiDET_Stash_Info	//RETURN TYPES:
 }bd_info;
 
 #ifdef BiDET_LARGE_BUFFER
-#define bd_buffSize sizeof(uint64_bd)
-#define bd_buffType uint64_bd
+	#define bd_buffSize sizeof(uint64_bd)
+	#define bd_buffType uint64_bd
 #else
-#define bd_buffSize sizeof(uint32_bd)
-#define bd_buffType uint32_bd
+	#define bd_buffSize sizeof(uint32_bd)
+	#define bd_buffType uint32_bd
 #endif
 
 #define BD_HASHMAX 0xffffffffffffffffUi64
