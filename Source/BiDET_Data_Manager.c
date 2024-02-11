@@ -422,7 +422,7 @@ Build_Reservation(void** ppResTarget, uint64_bd sizeReserved)
 static inline void
 Comit_Reserve
 (char*		keyName,		key_bd*			pKey,
-uint64_bd	sizeRequired,	uint64_bd		hash,
+uint64_bd	sizeRequired,		uint64_bd		hash,
 void*		dataPtr,		bd_buffType		sizeReserved)
 {
 	key_bd* pVoidKey = Check_Void(sizeRequired);
