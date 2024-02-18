@@ -9,10 +9,6 @@ typedef unsigned long int		uint32_bd;
 typedef long long			int64_bd;
 typedef unsigned long long		uint64_bd;
 
-#ifdef BiDET_ENABLE_DEBUG
-#define BiDET_ERR_ENABLE_DEBUG
-#endif
-
 #include "BiDET_Error.h"
 
 typedef enum BiDET_Action
@@ -30,17 +26,21 @@ typedef enum BiDET_Stash_Info	//RETURN TYPES:
 	SPACE_TOTAL,				//uint64_bd
 	SPACE_REMAINING,			//uint64_bd
 	NUM_KEYS,				//uint64_bd
+	NUM_VOIDS,				//uint64_bd
 	NUM_STASHES,				//uint64_bd
 	HANDLE_STASH,				//stash_bd*
 	HANDLE_KEYS				//key_bd*
 }bd_info;
 
+#define bd_nameBuffType	uint32_bd
+#define bd_nameBuffSize sizeof(uint32_bd)
+
 #ifdef BiDET_LARGE_BUFFER
-	#define bd_buffSize sizeof(uint64_bd)
-	#define bd_buffType uint64_bd
+#define bd_dataBuffType uint64_bd
+#define bd_dataBuffSize sizeof(uint64_bd)
 #else
-	#define bd_buffSize sizeof(uint32_bd)
-	#define bd_buffType uint32_bd
+#define bd_dataBuffType uint32_bd
+#define bd_dataBuffSize sizeof(uint32_bd)
 #endif
 
 #define BD_HASHMAX 0xffffffffffffffffUi64
@@ -53,7 +53,7 @@ typedef struct BiDET_Key
 typedef struct BiDET_Stash
 {
 	void*		nextStash;
-	key_bd*		keyRing;
+	key_bd*		lastKey;
 	uint64_bd	sizeByte;
 	int64_bd	numKeys;
 	void*		nextEntry;
@@ -65,8 +65,6 @@ stash_bd**
 BiDET_Retrieve_Stash();
 void 
 BiDET_Verify_Req(char* keyName, void* dataIO, uint64_bd* sizeIO, bd_action action, void** callID);
-void
-BiDET_Stash_Request(void* pInfoOut, uint32_bd stashID, bd_info infoReq);
 
 
 void									BiDET_Set_Callback(void(*pCallback)(bd_errpack));
@@ -103,7 +101,7 @@ void									BiDET_Reset();
 * INTO THE INFORET FIELD. INFORET RETURN TYPES ARE
 * DENOTED NEXT TO THE CORRESPONDING BD_INFO REQUEST.
 */
-void									BiDET_Stash_Request(void* pInfoOut, uint32_bd stashID, bd_info infoReq);
-#define BD_StashInfo(infoRet, stashID, requestedInfo)			BiDET_Stash_Request(&infoRet, stashID, requestedInfo)
+void									BiDET_Stash_Request(void* pInfoOut, bd_info infoReq);
+#define BD_StashInfo(infoRet, requestedInfo)				BiDET_Stash_Request(&infoRet, requestedInfo)
 
 #endif
