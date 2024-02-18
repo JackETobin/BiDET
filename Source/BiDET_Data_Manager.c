@@ -12,12 +12,12 @@
 
 #include "BiDET.h"
 
-#define BD_INT32SIZE sizeof(uint32_bd)
+#define BD_METAINFOSIZE bd_nameBuffSize + bd_dataBuffSize
 #define BD_KEYSIZE sizeof(key_bd)
 
 #define BD_DATAMINLEN 1
 #define BD_NAMEMINLEN 1
-#define BD_DATAMINSIZE BD_INT32SIZE + bd_buffSize + BD_NAMEMINLEN + BD_DATAMINLEN
+#define BD_DATAMINSIZE BD_METAINFOSIZE + BD_NAMEMINLEN + BD_DATAMINLEN
 
 static stash_bd* Stash;
 
@@ -26,16 +26,73 @@ BiDET_Retrieve_Stash()
 { return &Stash; }
 
 
-static inline int32_bd
-Name_Check(char* inKeyName, char* inStoreName)
+static inline uint64_bd
+Hash(char* keyName, bd_nameBuffType* pKeyLen)
 {
-	uint32_bd storedLen = *(uint32_bd*)inStoreName;
-	inStoreName -= storedLen;
-	while (*inKeyName == *inStoreName && storedLen)
+	bd_nameBuffType keyLen = 0;
+	uint64_bd hashVal = 1;
+	while (*keyName != '\0')
 	{
-		inKeyName++; inStoreName++; storedLen--;
+		hashVal += *keyName * (*keyName - *(keyName + 1));
+		keyName++; keyLen++;
 	}
-	return (*inKeyName == storedLen);
+	*pKeyLen = keyLen + 1;
+	return hashVal;
+}
+
+
+static inline key_bd*
+Border_Index(uint64_bd hash)
+{
+	key_bd* pKey = Stash->lastKey;
+	return (hash < pKey->hash) ? (pKey + Stash->numKeys - 1) : pKey;
+}
+
+static inline key_bd*
+Binary_Index(uint64_bd hash)
+{
+	int64_bd keyAdjust = Stash->numKeys >> 1;
+	key_bd* pKey = Stash->lastKey + keyAdjust;
+	int32_bd positionCheck = (keyAdjust > 1) *
+							 ((hash < (pKey + 1)->hash) -
+							 (hash >= (pKey - 1)->hash));
+	while (positionCheck)
+	{
+		keyAdjust >>= (keyAdjust > 1);
+		pKey += positionCheck * keyAdjust;
+		positionCheck = (hash < (pKey + 1)->hash) -
+						(hash >= (pKey - 1)->hash);
+	}
+	return pKey;
+}
+
+static key_bd* (*Hash_Type[2])(uint64_bd) =
+{ Binary_Index, Border_Index };
+
+static inline key_bd*
+Index(uint64_bd hash)
+{
+	uint32_bd border = (hash <= (Stash->lastKey + Stash->numKeys - 1)->hash ||
+						hash >= (Stash->lastKey)->hash);
+	return Hash_Type[border](hash);
+}
+
+
+static void
+Insert_Key(key_bd* pTarget, void* nextEntry, uint64_bd hash)
+{
+	Stash->lastKey--;
+	Stash->numKeys++;
+
+	key_bd* pKey = Stash->lastKey;
+	pTarget -= (pTarget->hash < hash);
+	while (pKey < pTarget)
+	{
+		*pKey = *(pKey + 1);
+		pKey++;
+	}
+	*pTarget = (key_bd){ hash, nextEntry };
+	return;
 }
 
 
@@ -51,77 +108,19 @@ Remove_Key(key_bd* pTarget, key_bd* pLimit)
 }
 
 
-static inline uint64_bd 
-Hash(char* keyName, uint32_bd* pKeyLen)
+static inline int32_bd
+Name_Check(char* inKeyName, char* inStoreName)
 {
-	uint32_bd keyLen = 0;
-	uint64_bd hashVal = 1;
-	while (*keyName != '\0')
+	inStoreName -= bd_nameBuffSize;
+	bd_nameBuffType storedLen = *(bd_nameBuffType*)inStoreName;
+	inStoreName -= storedLen;
+	uint32_bd checkLen = 0;
+	while (*inKeyName == *inStoreName)
 	{
-		hashVal += *keyName * (*keyName - *(keyName + 1));
-		keyName++; keyLen++;
-	} 
-	*pKeyLen = keyLen;
-	return hashVal;
-}
-
-
-static inline key_bd*
-Border_Index(uint64_bd hash)
-{
-	key_bd* keyRing = Stash->keyRing;
-	int64_bd numKeys = Stash->numKeys;
-	return (hash <= keyRing->hash) ? keyRing : (keyRing - numKeys);
-}
-
-
-static inline key_bd*
-Binary_Index(uint64_bd hash)
-{
-	int64_bd numKeys = Stash->numKeys;
-	key_bd* keyRing = Stash->keyRing;
-	key_bd* pKey = keyRing - (numKeys >> 1);
-
-	int32_bd positionCheck =	(pKey - 1 > keyRing - numKeys) *
-					((hash < (pKey + 1)->hash) -
-					(hash >= (pKey - 1)->hash));
-	uint32_bd i = 0;
-	while (positionCheck)
-	{
-		i += (numKeys >> (i + 2) > 0);
-		pKey += positionCheck * (numKeys >> (i + 1));
-		positionCheck = (hash < (pKey + 1)->hash) -
-				(hash >= (pKey - 1)->hash);
+		inKeyName++; inStoreName++;
+		checkLen++;
 	}
-	return pKey;
-}
-
-
-static inline key_bd*
-Index(uint64_bd hash)
-{
-	key_bd* pKey = Stash->keyRing;
-	uint32_bd border = (hash <= pKey->hash ||
-			    hash >= (pKey - (Stash->numKeys - 1))->hash);
-	return border ? Border_Index(hash) : Binary_Index(hash);
-}
-
-
-static void
-Insert_Key(key_bd* pTarget, void* nextEntry, uint64_bd hash)
-{
-	key_bd* pKey = Stash->keyRing - Stash->numKeys;
-	pTarget -= (pTarget->hash < hash);
-
-	while (pKey < pTarget)
-	{
-		*pKey = *(pKey + 1);
-		pKey++;
-	}
-	
-	*pKey = (key_bd){ hash, nextEntry };
-	Stash->numKeys++;
-	return;
+	return (checkLen == storedLen);
 }
 
 
@@ -133,7 +132,7 @@ Check_Duplicate_Key_Name(char* keyName, key_bd** pTarget, const uint64_bd hash)
 
 	uint32_bd duplicate = 0;
 	do {
-		duplicate = Name_Check(keyName, pKey->data - BD_INT32SIZE);
+		duplicate = Name_Check(keyName, pKey->data);
 		pKey += (!duplicate);
 	} while (!duplicate && pKey->hash == hash);
 
@@ -142,12 +141,12 @@ Check_Duplicate_Key_Name(char* keyName, key_bd** pTarget, const uint64_bd hash)
 }
 
 
-static inline uint32_bd 
+static inline uint32_bd
 Check_Unique_Hash(char* keyName, key_bd** pTarget, const uint64_bd hash)
 {
 	key_bd* pKey = *pTarget;
 	uint32_bd duplicate = (hash == pKey->hash ||
-			       hash == (pKey + 1)->hash);
+						   hash == (pKey + 1)->hash);
 	return duplicate ? Check_Duplicate_Key_Name(keyName, pTarget, hash) : 0;
 }
 
@@ -156,8 +155,8 @@ static inline void
 Store_Data(void** ppTarget, char* dataIn, uint64_bd dataSize)
 {
 	char* entry = *(char**)ppTarget;
-	*((bd_buffType*)entry) = dataSize;
-	entry += bd_buffSize;
+	*((bd_dataBuffType*)entry) = dataSize;
+	entry += bd_dataBuffSize;
 
 	while (dataSize--)
 		*entry++ = *dataIn++;
@@ -167,33 +166,37 @@ Store_Data(void** ppTarget, char* dataIn, uint64_bd dataSize)
 }
 
 
-static inline void*
-Store_Key_Name(char* keyName, void* pTarget)
+static inline void
+Store_Key_Name(char* keyName, void** ppTarget)
 {
-	char* pReturn = (char*)pTarget;
-	while (*keyName != '\0')
-		*pReturn++ = *keyName++;
+	uint32_bd len = 0;
+	char* pReturn = (char*)*ppTarget;
+	
+	do {
+		*pReturn++ = *keyName;
+		len++;
+	} while (*keyName++ != '\0');
 
-	*(uint32_bd*)pReturn = pReturn - (char*)pTarget;
-	pReturn += BD_INT32SIZE;
-	return (void*)pReturn;
+	*(bd_nameBuffType*)pReturn = len;
+	pReturn += bd_nameBuffSize;
+	*ppTarget = (void*)pReturn;
+	return;
 }
 
 
-static inline bd_buffType
-Void_Shrink(key_bd* pVoidKey, uint64_bd shiftSize, bd_buffType newSize)
+static inline bd_dataBuffType
+Void_Shrink(key_bd* pVoidKey, uint64_bd shiftSize, bd_dataBuffType newSize)
 {
 	pVoidKey->data += shiftSize;
-	*(bd_buffType*)pVoidKey->data = newSize;
+	*(bd_dataBuffType*)pVoidKey->data = newSize;
 	return 0;
 }
 
 
-static inline bd_buffType
-Void_Fill(key_bd* pVoidKey, bd_buffType sizeRemaining)
+static inline bd_dataBuffType
+Void_Fill(key_bd* pVoidKey, bd_dataBuffType sizeRemaining)
 {
-	key_bd* pLimit = Stash->keyRing - (Stash->numKeys - 1);
-	Remove_Key(pVoidKey, pLimit);
+	Remove_Key(pVoidKey, Stash->lastKey);
 	return sizeRemaining;
 }
 
@@ -201,11 +204,11 @@ Void_Fill(key_bd* pVoidKey, bd_buffType sizeRemaining)
 static inline key_bd*
 Check_Void(uint64_bd totalSize)
 {
-	key_bd* pVoidKey = Stash->keyRing - (Stash->numKeys - 1);
+	key_bd* pVoidKey = Stash->lastKey;
 	uint32_bd spaceFound = 0;
 	while (pVoidKey->hash == BD_HASHMAX && !spaceFound)
 	{
-		spaceFound = (*(bd_buffType*)(pVoidKey->data) >= totalSize);
+		spaceFound = (*(bd_dataBuffType*)(pVoidKey->data) >= totalSize);
 		pVoidKey -= (!spaceFound);
 	}
 	return (spaceFound) ? pVoidKey : BD_NULL;
@@ -213,27 +216,28 @@ Check_Void(uint64_bd totalSize)
 
 
 static inline void*
-Consolidate_Void(key_bd* pVoidKey, uint64_bd sizeRequired, bd_buffType* dataSize)
+Consolidate_Void(key_bd* pVoidKey, uint64_bd sizeRequired, bd_dataBuffType* dataSize)
 {
 	void* writeTarget = pVoidKey->data;
-	bd_buffType sizeDiff = *(bd_buffType*)pVoidKey->data - sizeRequired;
+	bd_dataBuffType sizeDiff = *(bd_dataBuffType*)(pVoidKey->data - sizeRequired);
 	*dataSize += (sizeDiff < BD_DATAMINSIZE) ?
 		Void_Fill(pVoidKey, sizeDiff) : Void_Shrink(pVoidKey, sizeRequired, sizeDiff);
 	return writeTarget;
 }
 
+
 static inline void
 Commit_Store
-(	char*		keyName,		key_bd*			pKey, 
-	uint64_bd	sizeRequired,		uint64_bd		hash, 
-	void*		dataIn,			bd_buffType		dataSize)
+(char*			keyName,		key_bd*				pKey,
+uint64_bd		sizeRequired,	uint64_bd			hash,
+void*			dataIn,			bd_dataBuffType		dataSize)
 {
 	key_bd* pVoidKey = Check_Void(sizeRequired);
-	void** writeTarget = (pVoidKey) ? 
-		&(void*) { Consolidate_Void(pVoidKey, sizeRequired, &dataSize) } : 
+	void** writeTarget = (pVoidKey) ?
+		&(void*) { Consolidate_Void(pVoidKey, sizeRequired, &dataSize) } :
 		&Stash->nextEntry;
 
-	*writeTarget = (char*)Store_Key_Name(keyName, (char*)*writeTarget);
+	Store_Key_Name(keyName, writeTarget);
 	Insert_Key(pKey, *writeTarget, hash);
 	Store_Data(writeTarget, dataIn, dataSize);
 	return;
@@ -241,25 +245,21 @@ Commit_Store
 
 
 static inline uint64_bd Size_Remaining()
-{
-	uint64_bd sizeRemaining = (void*)(Stash->keyRing - (Stash->numKeys - 1)) - Stash->nextEntry;
-	return sizeRemaining;
-}
-
+{ return (void*)Stash->lastKey - Stash->nextEntry; }
 
 static inline void
 BiDET_Store(char* keyName, void* dataIn, uint64_bd* dataSize, void** callID)
 {
-	uint32_bd keyLen = 0;
-	uint64_bd hash = Hash(keyName, &keyLen);
-	uint64_bd sizeRequired = keyLen + BD_INT32SIZE + bd_buffSize + *dataSize;
-	uint32_bd inadequateSize = (Size_Remaining() < sizeRequired + BD_KEYSIZE);
+	bd_nameBuffType keyNameLen = 0;
+	uint64_bd hash = Hash(keyName, &keyNameLen);
+	uint64_bd sizeRequired = keyNameLen + BD_METAINFOSIZE + *dataSize + BD_KEYSIZE;
+	uint32_bd inadequateSize = (Size_Remaining() < sizeRequired);
 
 	key_bd* pKey = Index(hash);
 	uint32_bd duplicate = Check_Unique_Hash(keyName, &pKey, hash) * (!inadequateSize);
 
-	ERR_CATCH((duplicate * DUPLICATEKY) + (inadequateSize * SPACENEEDED), callID) ? 
-		Commit_Store(keyName, pKey, sizeRequired, hash, dataIn, (bd_buffType)*dataSize) : 0;
+	ERR_CATCH((duplicate * DUPLICATEKY) + (inadequateSize * SPACENEEDED), callID) ?
+		Commit_Store(keyName, pKey, sizeRequired, hash, dataIn, (bd_dataBuffType)*dataSize) : 0;
 	return;
 }
 
@@ -267,7 +267,7 @@ BiDET_Store(char* keyName, void* dataIn, uint64_bd* dataSize, void** callID)
 static inline uint32_bd
 Retrieve_Key(char* keyName, key_bd** ppKey)
 {
-	uint32_bd keyLen = 0;
+	bd_nameBuffType keyLen = 0;
 	uint64_bd hash = Hash(keyName, &keyLen);
 	*ppKey = Index(hash);
 	uint32_bd unique = !Check_Unique_Hash(keyName, ppKey, hash);
@@ -279,11 +279,11 @@ Retrieve_Key(char* keyName, key_bd** ppKey)
 static inline void
 Retrieve_Data(const key_bd* pKey, void* dataOut, const uint64_bd containerSize, void* callID[])
 {
-	bd_buffType dataSize = *(bd_buffType*)pKey->data;
+	bd_dataBuffType dataSize = *(bd_dataBuffType*)pKey->data;
 	dataSize = (ERR_CATCH((dataSize < containerSize) * CONTAINERMISSMATCH, callID)) ?
-				containerSize : 0;
+		containerSize : 0;
 
-	char* data = pKey->data + bd_buffSize;
+	char* data = pKey->data + bd_dataBuffSize;
 	while (dataSize--)
 	{
 		*(char*)(dataOut) = *data;
@@ -298,7 +298,7 @@ BiDET_Get(char* keyName, void* dataOut, uint64_bd* containerSize, void* callID[]
 {
 	key_bd* pKey;
 	uint32_bd unique = Retrieve_Key(keyName, &pKey);
-	(ERR_CATCH(unique * KEYNOTFOUND, callID)) ? 
+	(ERR_CATCH(unique * KEYNOTFOUND, callID)) ?
 		Retrieve_Data(pKey, dataOut, *containerSize, callID) : 0;
 	return;
 }
@@ -307,12 +307,13 @@ BiDET_Get(char* keyName, void* dataOut, uint64_bd* containerSize, void* callID[]
 static inline void
 Nextentry_Pushback()
 {
-	key_bd* lVoidKey = Stash->keyRing - (Stash->numKeys - 1);
-	uint32_bd lVoidKeySize = *(bd_buffType*)(lVoidKey->data);
+	key_bd* lVoidKey = Stash->lastKey;
+	uint32_bd lVoidKeySize = *(bd_dataBuffType*)(lVoidKey->data);
 	uint32_bd pushbackCheck = ((lVoidKey->data + lVoidKeySize) == Stash->nextEntry);
 
 	(pushbackCheck) ? Remove_Key(lVoidKey, lVoidKey) : 0;
 	Stash->nextEntry -= pushbackCheck * lVoidKeySize;
+	Stash->lastKey += pushbackCheck;
 	Stash->numKeys -= pushbackCheck;
 
 	return;
@@ -322,8 +323,9 @@ Nextentry_Pushback()
 static inline void
 Consolidate_Voids(key_bd* nVoid, key_bd* cVoid, key_bd* pLimit)
 {
-	*(bd_buffType*)(nVoid->data) += *(bd_buffType*)(cVoid->data);
+	*(bd_dataBuffType*)(nVoid->data) += *(bd_dataBuffType*)(cVoid->data);
 	Remove_Key(cVoid, pLimit);
+	Stash->lastKey++;
 	Stash->numKeys--;
 	return;
 }
@@ -336,7 +338,7 @@ Sweep_Void_Keys(key_bd* pLimit)
 	key_bd* nVoidKey = cVoidKey + 1;
 	while (nVoidKey->hash == BD_HASHMAX)
 	{
-		((nVoidKey->data + *(bd_buffType*)(nVoidKey->data) == cVoidKey->data)) ?
+		((nVoidKey->data + *(bd_dataBuffType*)(nVoidKey->data) == cVoidKey->data)) ?
 			Consolidate_Voids(nVoidKey, cVoidKey, pLimit) : 0;
 		cVoidKey++; nVoidKey++;
 	}
@@ -358,24 +360,24 @@ Insert_Void_Key(key_bd* pLimit, void* voidBegin)
 }
 
 
-static void* 
-Void_Data_In_Mem(key_bd* pTarget, bd_buffType sizeInMem)
+static void*
+Void_Data_In_Mem(key_bd* pTarget, bd_dataBuffType sizeInMem)
 {
-	char* voidBegin = pTarget->data - BD_INT32SIZE;
+	char* voidBegin = pTarget->data - bd_nameBuffSize;
 	voidBegin -= *(uint32_bd*)voidBegin;
-	*(bd_buffType*)voidBegin = sizeInMem;
-	
+	*(bd_dataBuffType*)voidBegin = sizeInMem;
+
 	return voidBegin;
 }
 
 
-static inline uint64_bd 
+static inline uint64_bd
 Size_In_Mem(key_bd* pKey)
 {
-	char* access = pKey->data - BD_INT32SIZE;
-	uint64_bd sizeInMem = *(uint32_bd*)access + BD_INT32SIZE;
-	access += BD_INT32SIZE;
-	sizeInMem += *(bd_buffType*)access + bd_buffSize;
+	char* data = pKey->data;
+	uint64_bd sizeInMem = *(bd_dataBuffType*)data + bd_dataBuffSize;
+	data -= bd_nameBuffSize;
+	sizeInMem += *(bd_nameBuffType*)data + bd_nameBuffSize;
 
 	return sizeInMem;
 }
@@ -386,7 +388,7 @@ Commit_Remove(key_bd* pTarget)
 {
 	uint64_bd sizeInMem = Size_In_Mem(pTarget);
 	void* voidBegin = Void_Data_In_Mem(pTarget, sizeInMem);
-	key_bd* pLimit = Stash->keyRing - (Stash->numKeys - 1);
+	key_bd* pLimit = Stash->lastKey;
 
 	Remove_Key(pTarget, pLimit);
 	Insert_Void_Key(pLimit, voidBegin);
@@ -409,30 +411,31 @@ BiDET_Remove(char* keyName, void* v, uint64_bd* pi, void* callID[])
 }
 
 
-static inline void*
-Build_Reservation(void** ppResTarget, uint64_bd sizeReserved)
+static inline void
+Build_Reservation(void** ppResTarget, void* pDataPtr, uint64_bd sizeReserved)
 {
-	*(bd_buffType*)*ppResTarget = sizeReserved;
-	void* dataPtr = *ppResTarget + bd_buffSize;
-	*ppResTarget += (bd_buffSize + sizeReserved);
-	return dataPtr;
+	*(bd_dataBuffType*)*ppResTarget = sizeReserved;
+	void* dataPtr = *ppResTarget + bd_dataBuffSize;
+	*ppResTarget += (bd_dataBuffSize + sizeReserved);
+	*(void**)pDataPtr = dataPtr;
+	return;
 }
 
 
 static inline void
 Comit_Reserve
-(char*		keyName,		key_bd*			pKey,
-uint64_bd	sizeRequired,		uint64_bd		hash,
-void*		dataPtr,		bd_buffType		sizeReserved)
+(	char*		keyName,		key_bd*			pKey,
+	uint64_bd	sizeRequired,	uint64_bd		hash,
+	void*		dataPtr,		bd_dataBuffType	sizeReserved)
 {
 	key_bd* pVoidKey = Check_Void(sizeRequired);
 	void** writeTarget = (pVoidKey) ?
 		Consolidate_Void(pVoidKey, sizeRequired, &sizeReserved) : &Stash->nextEntry;
 
-	*writeTarget = (char*)Store_Key_Name(keyName, (char*)*writeTarget);
+	Store_Key_Name(keyName, writeTarget);
 	Insert_Key(pKey, *writeTarget, hash);
-	*(void**)dataPtr = Build_Reservation(writeTarget, sizeReserved);
-	
+	Build_Reservation(writeTarget, dataPtr, sizeReserved);
+
 	return;
 }
 
@@ -440,9 +443,9 @@ void*		dataPtr,		bd_buffType		sizeReserved)
 static inline void
 BiDET_Reserve(char* keyName, void* dataPtr, uint64_bd* sizeReserved, void** callID)
 {
-	uint32_bd keyLen = 0;
-	uint64_bd hash = Hash(keyName, &keyLen);
-	uint64_bd sizeRequired = keyLen + BD_INT32SIZE + bd_buffSize + *sizeReserved;
+	bd_nameBuffType keyNameLen = 0;
+	uint64_bd hash = Hash(keyName, &keyNameLen);
+	uint64_bd sizeRequired = keyNameLen + BD_METAINFOSIZE + *sizeReserved;
 	uint32_bd inadequateSize = (Size_Remaining() < sizeRequired + BD_KEYSIZE);
 
 	key_bd* pKey = Index(hash);
@@ -458,10 +461,10 @@ static inline void
 Commit_Fill(key_bd* pKey, void* dataIn, uint64_bd dataSize, void* callID[])
 {
 	char* data = pKey->data;
-	bd_buffType containerSize = *(bd_buffType*)data;
-	ERR_CATCH((dataSize < *(bd_buffType*)data) * DATATRUNCATION, callID);
+	bd_dataBuffType containerSize = *(bd_dataBuffType*)data;
+	ERR_CATCH((dataSize < *(bd_dataBuffType*)data) * DATATRUNCATION, callID);
 
-	data += bd_buffSize;
+	data += bd_dataBuffSize;
 	while (containerSize--)
 		*data++ = *(char*)dataIn++;
 	return;
@@ -484,8 +487,8 @@ BiDET_Fill(char* keyName, void* dataIn, uint64_bd* dataSize, void* callID[])
 static inline void
 Retrieve_Pointer(key_bd* pKey, void* pointerIO, uint64_bd* sizeReserved)
 {
-	*sizeReserved = *(bd_buffType*)pKey->data;
-	*(void**)pointerIO = pKey->data + bd_buffSize;
+	*sizeReserved = *(bd_dataBuffType*)pKey->data;
+	*(void**)pointerIO = pKey->data + bd_dataBuffSize;
 	return;
 }
 
@@ -504,7 +507,9 @@ BiDET_Retrieve(char* keyName, void* pointerIO, uint64_bd* sizeReserved, void** c
 
 static inline void
 BiDET_Request_Bypass_(char* c, void* v, uint64_bd* pi, void** noID)
-{ return; }
+{
+	return;
+}
 
 static void
 (*_action_dispatch[7])(char*, void*, uint64_bd*, void**) = {
@@ -525,4 +530,3 @@ BiDET_Verify_Req(char* keyName, void* dataIO, uint64_bd* sizeInput, bd_action re
 	reqAction *= ERR_CATCH((keyName == BD_NULL) * INVALIDNAME, callID);
 
 	return _action_dispatch[reqAction](keyName, dataIO, sizeInput, callID);
-}
