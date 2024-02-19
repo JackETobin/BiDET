@@ -530,3 +530,4 @@ BiDET_Verify_Req(char* keyName, void* dataIO, uint64_bd* sizeInput, bd_action re
 	reqAction *= ERR_CATCH((keyName == BD_NULL) * INVALIDNAME, callID);
 
 	return _action_dispatch[reqAction](keyName, dataIO, sizeInput, callID);
+}
