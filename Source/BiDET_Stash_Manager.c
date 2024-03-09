@@ -52,53 +52,30 @@ BiDET_Make_Stash(const uint64_bd sizeByte)
 
 
 static void
-Get_Requested_Info(void* pInfoOut, bd_info infoReq)
+Get_Requested_Info(stashprops_bd* pStashProps)
 {
 	stash_bd* activeStash = *BiDET_Retrieve_Stash();
-	switch (infoReq)
+
+	uint64_bd numVoids = 0;
+	key_bd* pKey = activeStash->lastKey;
+	while (pKey->hash == BD_HASHMAX)
+	{ numVoids++; pKey++; }
+
+	*pStashProps = (stashprops_bd)
 	{
-		case SPACE_TOTAL:
-			*(uint64_bd*)pInfoOut = activeStash->sizeByte;
-			break;
-
-		case SPACE_REMAINING:
-			*(uint64_bd*)pInfoOut = (void*)activeStash->lastKey - activeStash->nextEntry;
-			break;
-
-		case NUM_KEYS:
-			*(uint64_bd*)pInfoOut = activeStash->numKeys;
-			break;
-
-		case NUM_VOIDS:
-			uint64_bd numVoids = 0;
-			key_bd* pKey = activeStash->lastKey;
-			while(pKey->hash == BD_HASHMAX)
-			{ numVoids++; pKey++; }
-			*(uint64_bd*)pInfoOut = numVoids;
-			break;
-
-		case NUM_STASHES:
-			*(uint64_bd*)pInfoOut = (activeStash != BD_NULL);
-			break;
-
-		case HANDLE_STASH:
-			*(stash_bd**)pInfoOut = activeStash;
-			break;
-
-		case HANDLE_KEYS:
-			*(key_bd**)pInfoOut = activeStash->lastKey;
-			break;
-
-		default:
-			break;
-	}
+		.spaceTotal = activeStash->sizeByte,
+		.spaceRemaining = (void*)activeStash->lastKey - activeStash->nextEntry,
+		.numKeysLive = activeStash->numKeys - numVoids,
+		.numKeysVoid = numVoids,
+		.stashHandle = activeStash,
+		.keyHandle = activeStash->lastKey + numVoids
+	};
 }
 
 
 void
-BiDET_Stash_Request(void* pInfoOut, bd_info infoReq)
+BiDET_Stash_Request(stashprops_bd* pStashProps)
 {
-	uint32_bd requestVerification = (pInfoOut != BD_NULL);
-	(requestVerification) ? Get_Requested_Info(pInfoOut, infoReq) : 0;
+	(pStashProps) ? Get_Requested_Info(pStashProps) : 0;
 	return;
 }
