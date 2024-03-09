@@ -71,8 +71,8 @@ void									BiDET_Set_Callback(void(*pCallback)(bd_errpack));
 void									BiDET_Make_Stash(uint64_bd sizeBytes);
 #define BD_MakeStash(sizeByte)						BiDET_Make_Stash((uint64_bd)sizeByte)
 
-void									BiDET_Stash_Request(stashprops_bd* stashProps);
-#define BD_StashInfo(stashprops)					BiDET_Stash_Request(&stashprops)
+void									BiDET_Stash_Info_Request(stashprops_bd* stashProps);
+#define BD_StashInfo(stashprops)					BiDET_Stash_Info_Request(&stashprops)
 
 void									BiDET_Reset();
 #define BD_ClearStash							BiDET_Reset()
