@@ -74,7 +74,7 @@ Get_Requested_Info(stashprops_bd* pStashProps)
 
 
 void
-BiDET_Stash_Request(stashprops_bd* pStashProps)
+BiDET_Stash_Info_Request(stashprops_bd* pStashProps)
 {
 	(pStashProps) ? Get_Requested_Info(pStashProps) : 0;
 	return;
