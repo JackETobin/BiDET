@@ -1,13 +1,12 @@
 #ifndef C_STORE
 #define C_STORE
 
-#define KBtoBYTE 1024
-#define BD_NULL ((void*)0)
-
 typedef long int			int32_bd;
 typedef unsigned long int		uint32_bd;
 typedef long long			int64_bd;
 typedef unsigned long long		uint64_bd;
+
+#define BD_NULL ((void*)0)
 
 #include "BiDET_Error.h"
 
@@ -20,17 +19,6 @@ typedef enum BiDET_Action
 	FILL,
 	RETRIEVE
 }bd_action;
-
-typedef enum BiDET_Stash_Info	//RETURN TYPES:
-{
-	SPACE_TOTAL,				//uint64_bd
-	SPACE_REMAINING,			//uint64_bd
-	NUM_KEYS,				//uint64_bd
-	NUM_VOIDS,				//uint64_bd
-	NUM_STASHES,				//uint64_bd
-	HANDLE_STASH,				//stash_bd*
-	HANDLE_KEYS				//key_bd*
-}bd_info;
 
 #define bd_nameBuffType	uint32_bd
 #define bd_nameBuffSize sizeof(uint32_bd)
@@ -59,6 +47,16 @@ typedef struct BiDET_Stash
 	void*		nextEntry;
 }stash_bd;
 
+typedef struct BiDET_Stash_Properties
+{
+	stash_bd*	stashHandle;
+	uint64_bd	spaceTotal;
+	uint64_bd	spaceRemaining;
+	uint64_bd	numKeysLive;
+	uint64_bd	numKeysVoid;
+	key_bd*		keyHandle;
+}stashprops_bd;
+
 void
 BiDET_Exit(uint32_bd errorCode);
 stash_bd**
@@ -71,7 +69,10 @@ void									BiDET_Set_Callback(void(*pCallback)(bd_errpack));
 #define BD_SetErrCallback(pCallbackFunc)				BiDET_Set_Callback(pCallbackFunc)
 
 void									BiDET_Make_Stash(uint64_bd sizeBytes);
-#define BD_MakeStash(sizeKB)						BiDET_Make_Stash((uint64_bd)sizeKB * KBtoBYTE)
+#define BD_MakeStash(sizeByte)						BiDET_Make_Stash((uint64_bd)sizeByte)
+
+void									BiDET_Stash_Request(stashprops_bd* stashProps);
+#define BD_StashInfo(stashprops)					BiDET_Stash_Request(&stashprops)
 
 void									BiDET_Reset();
 #define BD_ClearStash							BiDET_Reset()
@@ -94,14 +95,5 @@ void									BiDET_Reset();
 
 #define BD_Fill(keyName, data)						BiDET_Verify_Req(keyName, &data, &(uint64_bd){sizeof(data)}, FILL, BD_ERR_ID(keyName))
 
-
-/*
-* FEED DESIRED BD_INFO FIELD INTO THE REQUESTEDINFO
-* FIELD OF BD_STASHINFO. RETURN VALUES WILL BE FED
-* INTO THE INFORET FIELD. INFORET RETURN TYPES ARE
-* DENOTED NEXT TO THE CORRESPONDING BD_INFO REQUEST.
-*/
-void									BiDET_Stash_Request(void* pInfoOut, bd_info infoReq);
-#define BD_StashInfo(infoRet, requestedInfo)				BiDET_Stash_Request(&infoRet, requestedInfo)
 
 #endif
