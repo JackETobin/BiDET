@@ -25,7 +25,7 @@ I am also working on a compaction function that compacts all live data into the 
   
 + BD_Reserve(keyName, dataPtr, sizeBytes)
 
-+ BD_Retrieve(keyName, dataPtr, dataSize)
++ BD_Retrieve(keyName, dataPtr, dataSizeReturn)
 
 + BD_Fill(keyName, data)
 
