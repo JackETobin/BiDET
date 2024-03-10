@@ -171,24 +171,6 @@ int main(int argc, char** argv)
 	//uint64_bd largeContainer;
 	//Get("a", largeContainer);
 
-	uint64_bd stashSize = 0;
-	BD_StashInfo(stashSize, SPACE_TOTAL);
-
-	uint64_bd spaceRemaining = 0;
-	BD_StashInfo(spaceRemaining, SPACE_REMAINING);
-
-	uint64_bd numKeys = 0;
-	BD_StashInfo(numKeys, NUM_KEYS);
-
-	uint64_bd numStashes = 0;
-	BD_StashInfo(numStashes, NUM_STASHES);
-
-	uint64_bd numVoids = 0;
-	BD_StashInfo(numVoids, NUM_VOIDS);
-
-	key_bd* lastKey;
-	BD_StashInfo(lastKey, HANDLE_KEYS);
-
 	BD_ClearStash;
 	
 	uint32_bd store = 5;
