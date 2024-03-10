@@ -30,4 +30,5 @@ I am also working on a compaction function that compacts all live data into the 
 + BD_Fill(keyName, data)
 
 
-BiDET is a work in progress, and a proper README file is in the works.
+
+##BiDET is a work in progress, and a proper README file is in the works.
