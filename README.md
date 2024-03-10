@@ -5,8 +5,8 @@ BiDET does not resize dynamically; if there is an attempt to store data when the
 
 BiDET tracks voidspace in memory and will attempt to fill voidspace if possible. If after filling a void the resulting space is too small to be practical, the remaining space will be combined with the data allocated into void.
 
-[!WARNING]
-***3/10/2024: BiDET cannot write into voids in memory as it is unable to properly read void size. If you want to use remove, you can only use it after the most recent call to a storge function.***
+> [!WARNING]
+> ***3/10/2024: BiDET cannot write into voids in memory as it is unable to properly read void size. If you want to use remove, you can only use it after the most recent call to a storge function.***
 
 I am also working on a compaction function that compacts all live data into the front of the allocation and pushes back the allocator.
 
