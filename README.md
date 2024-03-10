@@ -1,4 +1,8 @@
 # BiDET
+
+> [!NOTE]
+> **BiDET is a work in progress, and a proper README file is in the works.**
+
 BiDET is a hash table based memory management system that uses a binary search to retrieve keys and detect issues before insertion into an ordered list. This system is for small data sets and occupied a fixed space in memory.
 
 BiDET does not resize dynamically; if there is an attempt to store data when there is insufficuent space, the data will not be stored.
@@ -29,7 +33,3 @@ I am also working on a compaction function that compacts all live data into the 
 + BD_Retrieve(keyName, dataPtr, dataSizeReturn)
 
 + BD_Fill(keyName, data)
-
-
-
- **BiDET is a work in progress, and a proper README file is in the works.**
